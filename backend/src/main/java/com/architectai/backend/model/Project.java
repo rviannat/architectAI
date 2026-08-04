@@ -1,9 +1,12 @@
 package com.architectai.backend.model;
 
+import java.util.Date;
+
 public class Project {
     private String id;
     private String repoUrl;
     private String defaultBranch;
+    private Date createdAt;
 
     public Project() {
     }
@@ -12,6 +15,7 @@ public class Project {
         this.id = id;
         this.repoUrl = repoUrl;
         this.defaultBranch = defaultBranch;
+        this.createdAt = new Date();
     }
 
     public String getId() {
@@ -36,6 +40,14 @@ public class Project {
 
     public void setDefaultBranch(String defaultBranch) {
         this.defaultBranch = defaultBranch;
+    }
+
+    public Date getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Date createdAt) {
+        this.createdAt = createdAt;
     }
 }
 

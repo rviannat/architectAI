@@ -1,16 +1,26 @@
 package com.architectai.backend.service;
 
+import com.architectai.backend.model.Project;
 import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
 
 @Service
 public class GitService {
+
+    private final ProjectService projectService;
+
+    @Autowired
+    public GitService(ProjectService projectService) {
+        this.projectService = projectService;
+    }
 
     /**
      * Clona um repositório git para o diretório alvo.
@@ -49,6 +59,23 @@ public class GitService {
             }
             throw e;
         }
+    }
+
+    /**
+     * Clona repositório baseado em Project ID
+     * Usado pelo pipeline de análise
+     */
+    public String cloneRepositoryForAnalysis(String projectId) throws Exception {
+        Project project = projectService.getProject(projectId);
+        if (project == null) {
+            throw new RuntimeException("Project not found: " + projectId);
+        }
+
+        String workspaceId = projectId + "-" + UUID.randomUUID().toString().substring(0, 8);
+        Path targetDir = Path.of("./workspace").resolve(workspaceId);
+        
+        Path clonedPath = cloneRepository(project.getRepoUrl(), project.getDefaultBranch(), targetDir, null);
+        return clonedPath.toAbsolutePath().toString();
     }
 
     private void deleteRecursively(File file) {

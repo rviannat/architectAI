@@ -3,6 +3,7 @@ package com.architectai.backend.controller;
 import com.architectai.backend.dto.ProjectRequest;
 import com.architectai.backend.model.Project;
 import com.architectai.backend.service.GitService;
+import com.architectai.backend.service.ProjectService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,31 +17,32 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequestMapping("/api/v1/projects")
 public class ProjectController {
 
-    private final Map<String, Project> projects = new ConcurrentHashMap<>();
+    // Use ProjectService as the single source of truth for projects
+    private final ProjectService projectService;
     private final GitService gitService;
 
-    public ProjectController(GitService gitService) {
+    public ProjectController(ProjectService projectService, GitService gitService) {
+        this.projectService = projectService;
         this.gitService = gitService;
     }
 
     @PostMapping
     public ResponseEntity<Project> createProject(@RequestBody ProjectRequest req) {
-        String id = UUID.randomUUID().toString();
-        Project p = new Project(id, req.repoUrl(), req.defaultBranch());
-        projects.put(id, p);
-        return ResponseEntity.created(URI.create("/api/v1/projects/" + id)).body(p);
+        // Delegate creation to ProjectService so other services can access the project
+        Project p = projectService.createProject(req.repoUrl(), req.defaultBranch());
+        return ResponseEntity.created(URI.create("/api/v1/projects/" + p.getId())).body(p);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<Project> getProject(@PathVariable String id) {
-        Project p = projects.get(id);
+        Project p = projectService.getProject(id);
         if (p == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(p);
     }
 
     @PostMapping("/{id}/clone")
     public ResponseEntity<String> cloneProject(@PathVariable String id, @RequestHeader(value = "X-Git-Token", required = false) String token) {
-        Project p = projects.get(id);
+        Project p = projectService.getProject(id);
         if (p == null) return ResponseEntity.notFound().build();
 
         try {
