@@ -13,8 +13,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.stream.Stream;
     
 /**
  * Processa análises enfileiradas em background.
@@ -111,6 +115,7 @@ public class AnalysisJobProcessor {
             
             // Step 5: Consolidar responses (Tech Lead consolidation)
             AgentResponse techLeadResponse = aiOrchestrator.getTechLeadConsolidation(agentResponses);
+            agentResponses.put(techLeadResponse.agentName(), techLeadResponse);
             
             // Step 6: Obter informações do projeto para gerar relatório
             Project project = projectService.getProject(analysis.getProjectId());
@@ -145,23 +150,82 @@ public class AnalysisJobProcessor {
      * Extrai metadados do repositório para análise
      */
     private RepositoryMetadata extractRepositoryMetadata(String repositoryPath) {
-        // Implementação simplificada para MVP
-        // Em produção, adicionar detecção automática de linguagem, frameworks, etc
-        
+        Path repoPath = Path.of(repositoryPath);
+        Map<String, String> dependencies = new HashMap<>();
+
+        long fileCount = 0;
+        long totalLines = 0;
+        boolean hasTests = false;
+        boolean hasDocker = false;
+        boolean hasKubernetes = false;
+        boolean hasCiCd = false;
+        boolean hasJava = false;
+        boolean hasSql = false;
+        boolean hasYaml = false;
+
+        try (Stream<Path> files = Files.walk(repoPath)) {
+            List<Path> collected = files.filter(Files::isRegularFile).toList();
+            fileCount = collected.size();
+
+            for (Path file : collected) {
+                String normalizedPath = repoPath.relativize(file).toString().replace('\\', '/').toLowerCase(Locale.ROOT);
+                String fileName = file.getFileName().toString().toLowerCase(Locale.ROOT);
+
+                if (normalizedPath.contains("/test/") || normalizedPath.startsWith("test/") || fileName.endsWith("test.java")) {
+                    hasTests = true;
+                }
+                if (fileName.equals("dockerfile") || fileName.startsWith("docker-compose")) {
+                    hasDocker = true;
+                }
+                if (normalizedPath.contains("k8s") || normalizedPath.contains("kubernetes") || fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {
+                    hasYaml = true;
+                }
+                if (normalizedPath.contains(".github/workflows") || normalizedPath.contains("jenkinsfile") || normalizedPath.contains(".gitlab-ci")) {
+                    hasCiCd = true;
+                }
+                if (fileName.endsWith(".java")) {
+                    hasJava = true;
+                }
+                if (fileName.endsWith(".sql")) {
+                    hasSql = true;
+                }
+                if (normalizedPath.contains("k8s") || normalizedPath.contains("kubernetes") || normalizedPath.contains("helm")) {
+                    hasKubernetes = true;
+                }
+
+                if (fileName.equals("pom.xml") || fileName.equals("build.gradle") || fileName.equals("build.gradle.kts")) {
+                    dependencies.put(fileName, "present");
+                }
+
+                try (Stream<String> lines = Files.lines(file)) {
+                    totalLines += lines.count();
+                } catch (Exception ignored) {
+                    // Ignora arquivos binarios ou ilegiveis
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Falha ao extrair metadados do repositorio {}: {}", repositoryPath, e.getMessage());
+        }
+
+        String primaryLanguage = hasJava ? "java" : (hasSql ? "sql" : "unknown");
+        List<String> languages = hasJava ? List.of("java") : List.of("unknown");
+        List<String> frameworks = dependencies.containsKey("pom.xml") ? List.of("spring", "maven") : List.of();
+        String databaseType = hasSql ? "sql" : "unknown";
+
         return new RepositoryMetadata(
-            "unknown",  // repositoryUrl
-            "java",     // primaryLanguage
-            List.of("java"),  // languages
-            List.of("spring-boot", "spring-data-jpa"),  // frameworks
-            Map.of(),   // dependencies
-            0,          // fileCount
-            0,          // totalLines
-            true,       // hasTests
-            false,      // hasDocker
-            false,      // hasKubernetes
-            false,      // hasCiCd
-            "unknown",  // databaseType
-            null        // messageQueue
+            repositoryPath,
+            primaryLanguage,
+            languages,
+            frameworks,
+            dependencies,
+            (int) fileCount,
+            totalLines,
+            hasTests,
+            hasDocker,
+            hasKubernetes || hasYaml,
+            hasCiCd,
+            databaseType,
+            "unknown"
         );
     }
 

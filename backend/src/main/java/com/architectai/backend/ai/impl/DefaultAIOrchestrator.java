@@ -1,12 +1,16 @@
 package com.architectai.backend.ai.impl;
 
 import com.architectai.backend.ai.*;
+import com.architectai.backend.ai.impl.agents.TechLeadAgent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Implementação do orquestrador de agentes
@@ -15,7 +19,14 @@ import java.util.stream.Collectors;
 @Component
 public class DefaultAIOrchestrator implements AIOrchestrator {
 
-    private final List<SpecialistAgent> agents = new ArrayList<>();
+    private final List<SpecialistAgent> agents;
+    private final TechLeadAgent techLeadAgent;
+
+    public DefaultAIOrchestrator(List<SpecialistAgent> specialistAgents, TechLeadAgent techLeadAgent) {
+        this.agents = new ArrayList<>(specialistAgents);
+        this.agents.sort(Comparator.comparingInt(SpecialistAgent::executionOrder));
+        this.techLeadAgent = techLeadAgent;
+    }
 
     @Override
     public Map<String, AgentResponse> analyzeWithAgents(Path repositoryPath, RepositoryMetadata metadata, String analysisId) {
@@ -34,7 +45,7 @@ public class DefaultAIOrchestrator implements AIOrchestrator {
                 long start = System.currentTimeMillis();
                 log.info("Executando agente: {}", agent.getAgentName());
                 
-                AgentResponse response = agent.analyze(repositoryPath, analysisId);
+                AgentResponse response = agent.analyze(repositoryPath, metadata, analysisId);
                 results.put(agent.getAgentName(), response);
                 
                 long duration = System.currentTimeMillis() - start;
@@ -53,49 +64,16 @@ public class DefaultAIOrchestrator implements AIOrchestrator {
 
     @Override
     public AgentResponse getTechLeadConsolidation(Map<String, AgentResponse> agentResponses) {
-        log.info("Consolidando {} respostas de agentes...", agentResponses.size());
-        
-        // Consolidar todos os findings
-        List<AgentResponse.Finding> consolidatedFindings = agentResponses.values().stream()
-            .flatMap(response -> response.findings().stream())
-            .sorted(Comparator
-                .comparing((AgentResponse.Finding f) -> severityToInt(f.severity()))
-                .reversed()
-                .thenComparing(AgentResponse.Finding::confidence, Comparator.reverseOrder())
-            )
-            .limit(100)  // Top 100 findings
-            .collect(Collectors.toList());
-        
-        // Consolidar recomendações
-        List<String> consolidatedRecommendations = agentResponses.values().stream()
-            .flatMap(response -> response.recommendations().stream())
-            .distinct()
-            .collect(Collectors.toList());
-        
-        // Gerar sumário executivo
-        String summary = generateExecutiveSummary(agentResponses, consolidatedFindings);
-        
-        return new AgentResponse(
-            "Tech Lead",
-            "ORCHESTRATOR",
-            System.currentTimeMillis(),
-            0,
-            "SUCCESS",
-            consolidatedFindings,
-            summary,
-            consolidatedRecommendations,
-            Map.of(
-                "agent_count", agentResponses.size(),
-                "total_findings", consolidatedFindings.size(),
-                "critical_count", (int) consolidatedFindings.stream()
-                    .filter(f -> "CRITICAL".equals(f.severity()))
-                    .count()
-            )
-        );
+        log.info("Consolidando {} respostas de agentes com Tech Lead...", agentResponses.size());
+        return techLeadAgent.consolidate(agentResponses, "consolidation");
     }
 
     @Override
     public void registerAgent(SpecialistAgent agent) {
+        boolean exists = agents.stream().anyMatch(a -> a.getAgentName().equalsIgnoreCase(agent.getAgentName()));
+        if (exists) {
+            return;
+        }
         agents.add(agent);
         agents.sort(Comparator.comparingInt(SpecialistAgent::executionOrder));
         log.info("Agente registrado: {} (ordem: {})", agent.getAgentName(), agent.executionOrder());
@@ -106,33 +84,4 @@ public class DefaultAIOrchestrator implements AIOrchestrator {
         return new ArrayList<>(agents);
     }
 
-    private int severityToInt(String severity) {
-        return switch (severity) {
-            case "CRITICAL" -> 4;
-            case "HIGH" -> 3;
-            case "MEDIUM" -> 2;
-            case "LOW" -> 1;
-            default -> 0;
-        };
-    }
-
-    private String generateExecutiveSummary(Map<String, AgentResponse> agentResponses, List<AgentResponse.Finding> findings) {
-        StringBuilder sb = new StringBuilder();
-        
-        long criticalCount = findings.stream().filter(f -> "CRITICAL".equals(f.severity())).count();
-        long highCount = findings.stream().filter(f -> "HIGH".equals(f.severity())).count();
-        
-        sb.append("Análise técnica completa realizada por ").append(agentResponses.size()).append(" especialistas.\n\n");
-        sb.append(String.format("Encontrados %d problemas críticos e %d problemas altos.", criticalCount, highCount)).append("\n\n");
-        
-        // Top 3 recomendações
-        agentResponses.values().stream()
-            .flatMap(r -> r.recommendations().stream())
-            .distinct()
-            .limit(3)
-            .forEach(rec -> sb.append("• ").append(rec).append("\n"));
-        
-        return sb.toString();
-    }
 }
-

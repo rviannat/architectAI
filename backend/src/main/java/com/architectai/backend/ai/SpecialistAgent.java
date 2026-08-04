@@ -24,7 +24,7 @@ public interface SpecialistAgent {
      * @param analysisId ID da análise
      * @return AgentResponse estruturado com findings, recomendações, etc
      */
-    AgentResponse analyze(Path repositoryPath, String analysisId);
+    AgentResponse analyze(Path repositoryPath, RepositoryMetadata metadata, String analysisId);
 
     /**
      * Retorna se o agente pode processar este tipo de repositório
