@@ -87,18 +87,45 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
         </div>
       )}
 
-      {/* Download PDF */}
-      {analysis.status === 'COMPLETED' && (
-        <div className="flex gap-4">
-          <a
-            href={analysesApi.downloadUrl(analysis.id)}
-            download
-            className="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-          >
-            📄 Download PDF
-          </a>
+      {/* Ações do relatório */}
+      <section className="bg-white rounded-xl border p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">Relatório da análise</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              {analysis.status === 'COMPLETED'
+                ? 'O PDF consolidado está pronto para visualização e download.'
+                : analysis.status === 'FAILED'
+                  ? 'Não foi possível gerar o PDF porque a análise falhou.'
+                  : 'O PDF será liberado automaticamente quando a análise terminar.'}
+            </p>
+          </div>
+
+          {analysis.status === 'COMPLETED' ? (
+            <div className="flex flex-col sm:flex-row gap-3">
+              <a
+                href={analysesApi.downloadUrl(analysis.id)}
+                target="_blank"
+                rel="noreferrer"
+                className="border border-brand-200 text-brand-700 hover:bg-brand-50 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors text-center"
+              >
+                Abrir PDF
+              </a>
+              <a
+                href={analysesApi.downloadUrl(analysis.id)}
+                download
+                className="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors text-center"
+              >
+                📄 Baixar PDF
+              </a>
+            </div>
+          ) : (
+            <div className="text-xs text-slate-400">
+              Status atual: <span className="font-medium">{analysis.status}</span>
+            </div>
+          )}
         </div>
-      )}
+      </section>
 
       {/* Static analysis por ferramenta */}
       {Object.keys(analysis.staticAnalysisFindingsByTool || {}).length > 0 && (

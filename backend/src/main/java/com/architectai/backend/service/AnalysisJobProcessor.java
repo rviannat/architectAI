@@ -7,7 +7,8 @@ import com.architectai.backend.ai.SpecialistAgent;
 import com.architectai.backend.model.Analysis;
 import com.architectai.backend.model.Finding;
 import com.architectai.backend.model.Project;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -25,10 +26,10 @@ import java.util.stream.Stream;
  * Processa análises enfileiradas em background.
  * Para MVP, usa polling de 5 segundos. Em produção, usar Kafka/RabbitMQ.
  */
-@Slf4j
 @Component
 @EnableScheduling
 public class AnalysisJobProcessor {
+    private static final Logger log = LoggerFactory.getLogger(AnalysisJobProcessor.class);
 
     private final AnalysisService analysisService;
     private final ProjectService projectService;

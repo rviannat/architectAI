@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.nio.file.Path;
+import java.util.List;
 import jakarta.validation.Valid;
 
 @RestController
@@ -35,11 +36,24 @@ public class ProjectController {
             .body(ApiResponse.of(201, "Project created", p));
     }
 
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<Project>>> listProjects() {
+        return ResponseEntity.ok(ApiResponse.of(200, "Projects listed", projectService.listProjects()));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<Project>> getProject(@PathVariable String id) {
         Project p = projectService.getProject(id);
         if (p == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(ApiResponse.of(200, "Project found", p));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteProject(@PathVariable String id) {
+        Project p = projectService.getProject(id);
+        if (p == null) return ResponseEntity.notFound().build();
+        projectService.deleteProject(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/clone")

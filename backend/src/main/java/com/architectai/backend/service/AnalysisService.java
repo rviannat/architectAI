@@ -44,15 +44,17 @@ public class AnalysisService {
     /**
      * Obtém status de uma análise
      */
+    @Transactional(readOnly = true)
     public Analysis getAnalysis(String analysisId) {
-        return analysisRepository.findById(analysisId).orElse(null);
+        return analysisRepository.findDetailedById(analysisId).orElse(null);
     }
 
     /**
      * Lista análises de um projeto
      */
+    @Transactional(readOnly = true)
     public List<Analysis> listAnalysisByProject(String projectId) {
-        return analysisRepository.findByProjectIdOrderByCreatedAtDesc(projectId);
+        return analysisRepository.findDetailedByProjectIdOrderByCreatedAtDesc(projectId);
     }
 
     /**
@@ -75,8 +77,9 @@ public class AnalysisService {
     /**
      * Atualiza campos de análise após conclusão
      */
+    @Transactional
     public void completeAnalysis(String analysisId, String repositoryPath, Integer findingsCount, String reportUrl, Long estimatedCostRs) {
-        completeAnalysis(analysisId, repositoryPath, findingsCount, reportUrl, "", "", estimatedCostRs, List.of(), Map.of(), null);
+        doCompleteAnalysis(analysisId, repositoryPath, findingsCount, reportUrl, "", "", estimatedCostRs, List.of(), Map.of(), null);
     }
 
     @Transactional
@@ -89,10 +92,37 @@ public class AnalysisService {
         String manifestUrl,
         Long estimatedCostRs
     ) {
-        completeAnalysis(analysisId, repositoryPath, findingsCount, reportUrl, commercialReportUrl, manifestUrl, estimatedCostRs, List.of(), Map.of(), null);
+        doCompleteAnalysis(analysisId, repositoryPath, findingsCount, reportUrl, commercialReportUrl, manifestUrl, estimatedCostRs, List.of(), Map.of(), null);
     }
 
+    @Transactional
     public void completeAnalysis(
+        String analysisId,
+        String repositoryPath,
+        Integer findingsCount,
+        String reportUrl,
+        String commercialReportUrl,
+        String manifestUrl,
+        Long estimatedCostRs,
+        List<Finding> findings,
+        Map<String, Integer> staticAnalysisFindingsByTool,
+        String staticAnalysisReportUrl
+    ) {
+        doCompleteAnalysis(
+            analysisId,
+            repositoryPath,
+            findingsCount,
+            reportUrl,
+            commercialReportUrl,
+            manifestUrl,
+            estimatedCostRs,
+            findings,
+            staticAnalysisFindingsByTool,
+            staticAnalysisReportUrl
+        );
+    }
+
+    private void doCompleteAnalysis(
         String analysisId,
         String repositoryPath,
         Integer findingsCount,

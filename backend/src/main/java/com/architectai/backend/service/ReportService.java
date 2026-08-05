@@ -17,7 +17,8 @@ import com.itextpdf.layout.Canvas;
 import com.itextpdf.layout.Document;
 import com.itextpdf.layout.element.*;
 import com.itextpdf.layout.properties.*;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -39,10 +40,10 @@ import java.util.Objects;
 /**
  * Serviço de geração de relatórios PDF profissionais usando iText
  */
-@Slf4j
 @Service
 public class ReportService {
-
+    private static final Logger log = LoggerFactory.getLogger(ReportService.class);
+    
     private static final DateTimeFormatter PDF_DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
     private static final long MIN_PDF_SIZE_BYTES = 512;
 
@@ -166,7 +167,12 @@ public class ReportService {
                 }
             }
 
-            renderIndexPage(pdf, fontBold, fontNormal, tocEntries);
+            try {
+                renderIndexPage(pdf, fontBold, fontNormal, tocEntries);
+            } catch (Exception indexError) {
+                // Keep the report generation resilient: missing index overlay must not fail the whole analysis.
+                log.warn("Falha ao renderizar indice do PDF da analise {}: {}", analysis.getId(), indexError.getMessage());
+            }
         }
 
         return finalizePdf(tempOutputPath, outputPath);

@@ -1,5 +1,6 @@
 package com.architectai.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
@@ -139,6 +140,7 @@ public class Finding {
         this.persistenceId = persistenceId;
     }
 
+    @JsonIgnore
     public Analysis getAnalysis() {
         return analysis;
     }

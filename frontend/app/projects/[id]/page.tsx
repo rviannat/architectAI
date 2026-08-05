@@ -107,7 +107,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                   <th className="text-left px-4 py-3">Status</th>
                   <th className="text-left px-4 py-3">Findings</th>
                   <th className="text-left px-4 py-3">Data</th>
-                  <th className="px-4 py-3"></th>
+                      <th className="px-4 py-3">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -122,9 +122,21 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     </td>
                     <td className="px-4 py-3">{a.findingsCount ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-500">{new Date(a.createdAt).toLocaleDateString('pt-BR')}</td>
-                    <td className="px-4 py-3">
-                      <Link href={`/analyses/${a.id}`} className="text-brand-600 hover:underline text-xs">Ver</Link>
-                    </td>
+                     <td className="px-4 py-3">
+                       <div className="flex items-center gap-3 justify-end">
+                         <Link href={`/analyses/${a.id}`} className="text-brand-600 hover:underline text-xs">Ver</Link>
+                         {a.status === 'COMPLETED' && (
+                           <a
+                             href={analysesApi.downloadUrl(a.id)}
+                             target="_blank"
+                             rel="noreferrer"
+                             className="text-emerald-700 hover:underline text-xs font-medium"
+                           >
+                             PDF
+                           </a>
+                         )}
+                       </div>
+                     </td>
                   </tr>
                 ))}
               </tbody>

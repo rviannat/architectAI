@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <span className="text-brand-700 font-bold text-xl tracking-tight">🏗 ArchitectAI</span>
             <nav className="ml-8 flex gap-6 text-sm text-slate-600">
               <a href="/" className="hover:text-brand-600 transition-colors">Dashboard</a>
-              <a href="/projects/new" className="hover:text-brand-600 transition-colors">+ Novo Projeto</a>
+              <a href="/projects/new" className="hover:text-brand-600 transition-colors">+ Analisar Repositório</a>
             </nav>
           </div>
         </header>

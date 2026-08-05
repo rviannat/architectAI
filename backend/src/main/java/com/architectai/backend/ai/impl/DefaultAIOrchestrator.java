@@ -2,7 +2,8 @@ package com.architectai.backend.ai.impl;
 
 import com.architectai.backend.ai.*;
 import com.architectai.backend.ai.impl.agents.TechLeadAgent;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
@@ -15,9 +16,9 @@ import java.util.Map;
 /**
  * Implementação do orquestrador de agentes
  */
-@Slf4j
 @Component
 public class DefaultAIOrchestrator implements AIOrchestrator {
+    private static final Logger log = LoggerFactory.getLogger(DefaultAIOrchestrator.class);
 
     private final List<SpecialistAgent> agents;
     private final TechLeadAgent techLeadAgent;

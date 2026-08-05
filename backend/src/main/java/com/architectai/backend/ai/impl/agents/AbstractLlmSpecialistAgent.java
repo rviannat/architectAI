@@ -7,7 +7,8 @@ import com.architectai.backend.ai.SpecialistAgent;
 import com.architectai.backend.ai.llm.LlmClient;
 import com.architectai.backend.config.AgentAiProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,9 +22,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-@Slf4j
 public abstract class AbstractLlmSpecialistAgent implements SpecialistAgent {
-
+    private static final Logger log = LoggerFactory.getLogger(AbstractLlmSpecialistAgent.class);
     private static final int MAX_FILES = 45;
     private static final int MAX_FILE_SIZE_BYTES = 160_000;
     private static final int MAX_CONTEXT_CHARS = 80_000;

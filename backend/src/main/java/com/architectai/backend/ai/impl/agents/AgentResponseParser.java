@@ -3,7 +3,8 @@ package com.architectai.backend.ai.impl.agents;
 import com.architectai.backend.ai.AgentResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,8 +12,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
-@Slf4j
 public class AgentResponseParser {
+    private static final Logger log = LoggerFactory.getLogger(AgentResponseParser.class);
 
     private final ObjectMapper objectMapper;
 

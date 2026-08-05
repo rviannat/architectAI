@@ -1,6 +1,7 @@
 package com.architectai.backend;
 
 import com.architectai.backend.model.Analysis;
+import com.architectai.backend.model.Finding;
 import com.architectai.backend.model.Project;
 import com.architectai.backend.service.AnalysisService;
 import com.architectai.backend.service.ProjectService;
@@ -12,6 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.hamcrest.Matchers.greaterThan;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -104,6 +106,44 @@ class Layer1ApiSmokeTest {
             .andExpect(jsonPath("$.status").value(200))
             .andExpect(jsonPath("$.data.analysisId").value(analysis.getId()))
             .andExpect(jsonPath("$.data.technicalReport").value("/tmp/report.pdf"));
+    }
+
+    @Test
+    void getAnalysisShouldExposePersistedFindings() throws Exception {
+        Project project = projectService.createProject("https://github.com/example/repo.git", "main");
+        Analysis analysis = analysisService.createAnalysis(project.getId(), "CODE_REVIEW");
+
+        Finding finding = new Finding(
+            "semgrep",
+            "SEC-1",
+            "SECURITY",
+            "HIGH",
+            "src/Main.java",
+            42,
+            "Hardcoded secret found",
+            "token=abc123",
+            List.of("security", "secret")
+        );
+
+        analysisService.completeAnalysis(
+            analysis.getId(),
+            "/workspace/repo",
+            1,
+            "/tmp/report.pdf",
+            "",
+            "/tmp/manifest.md",
+            120L,
+            List.of(finding),
+            java.util.Map.of("semgrep", 1),
+            "/tmp/findings.json"
+        );
+
+        mockMvc.perform(get("/api/v1/analyses/" + analysis.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.id").value(analysis.getId()))
+            .andExpect(jsonPath("$.data.findingsCount").value(1))
+            .andExpect(jsonPath("$.data.findings[0].tool").value("semgrep"))
+            .andExpect(jsonPath("$.data.findings[0].message").value("Hardcoded secret found"));
     }
 
     @Test

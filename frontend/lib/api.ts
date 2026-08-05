@@ -54,6 +54,9 @@ export const projectsApi = {
 
   list: () =>
     api.get<ApiResponse<Project[]>>('/api/v1/projects').then(r => r.data.data),
+
+  delete: (id: string) =>
+    api.delete(`/api/v1/projects/${id}`),
 }
 
 export const analysesApi = {

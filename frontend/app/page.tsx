@@ -17,24 +17,30 @@ export default function Dashboard() {
   const [recentAnalyses, setRecentAnalyses] = useState<Analysis[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const ps = await projectsApi.list().catch(() => [] as Project[])
-        setProjects(ps)
-        const all: Analysis[] = []
-        for (const p of ps.slice(0, 5)) {
-          const as = await analysesApi.listByProject(p.id).catch(() => [] as Analysis[])
-          all.push(...as)
-        }
-        all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        setRecentAnalyses(all.slice(0, 10))
-      } finally {
-        setLoading(false)
+  async function load() {
+    try {
+      const ps = await projectsApi.list().catch(() => [] as Project[])
+      setProjects(ps)
+      const all: Analysis[] = []
+      for (const p of ps.slice(0, 5)) {
+        const as = await analysesApi.listByProject(p.id).catch(() => [] as Analysis[])
+        all.push(...as)
       }
+      all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      setRecentAnalyses(all.slice(0, 10))
+    } finally {
+      setLoading(false)
     }
-    load()
-  }, [])
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function handleDelete(id: string) {
+    if (!confirm('Deletar este projeto e todas suas análises?')) return
+    await projectsApi.delete(id)
+    setProjects(prev => prev.filter(p => p.id !== id))
+    setRecentAnalyses(prev => prev.filter(a => a.projectId !== id))
+  }
 
   return (
     <div className="space-y-8">
@@ -68,9 +74,14 @@ export default function Dashboard() {
                   <Link
                     key={p.id}
                     href={`/projects/${p.id}`}
-                    className="bg-white rounded-xl border p-4 hover:shadow-md transition-shadow"
+                    className="bg-white rounded-xl border p-4 hover:shadow-md transition-shadow relative group"
                   >
-                    <div className="font-medium text-slate-900 truncate">{p.repoUrl.replace('https://github.com/', '')}</div>
+                    <button
+                      onClick={e => { e.preventDefault(); handleDelete(p.id) }}
+                      className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs px-1"
+                      title="Deletar projeto"
+                    >✕</button>
+                    <div className="font-medium text-slate-900 truncate pr-4">{p.repoUrl.replace('https://github.com/', '')}</div>
                     <div className="text-xs text-slate-500 mt-1">Branch: {p.defaultBranch}</div>
                     <div className="text-xs text-slate-400 mt-1">{new Date(p.createdAt).toLocaleDateString('pt-BR')}</div>
                   </Link>
@@ -93,7 +104,7 @@ export default function Dashboard() {
                       <th className="text-left px-4 py-3">Status</th>
                       <th className="text-left px-4 py-3">Findings</th>
                       <th className="text-left px-4 py-3">Data</th>
-                      <th className="px-4 py-3"></th>
+                      <th className="px-4 py-3">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -109,7 +120,19 @@ export default function Dashboard() {
                         <td className="px-4 py-3">{a.findingsCount ?? '—'}</td>
                         <td className="px-4 py-3 text-slate-500">{new Date(a.createdAt).toLocaleDateString('pt-BR')}</td>
                         <td className="px-4 py-3">
-                          <Link href={`/analyses/${a.id}`} className="text-brand-600 hover:underline text-xs">Ver</Link>
+                          <div className="flex items-center gap-3 justify-end">
+                            <Link href={`/analyses/${a.id}`} className="text-brand-600 hover:underline text-xs">Ver</Link>
+                            {a.status === 'COMPLETED' && (
+                              <a
+                                href={analysesApi.downloadUrl(a.id)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-emerald-700 hover:underline text-xs font-medium"
+                              >
+                                PDF
+                              </a>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
