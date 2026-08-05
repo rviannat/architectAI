@@ -57,6 +57,7 @@ public abstract class AbstractLlmSpecialistAgent implements SpecialistAgent {
             responseMetadata.put("context_length", context.length());
             responseMetadata.put("analysis_id", analysisId);
             responseMetadata.put("eligible_files", toRelativeFileList(repositoryPath, relevantFiles));
+            responseMetadata.put("agent_domain", getAgentDomain());
 
             AgentResponse parsed = parser.parse(rawResponse, getAgentName(), getAgentType(), duration, responseMetadata);
             return ensureNonEmptyFindings(parsed, toRelativeFileList(repositoryPath, relevantFiles));

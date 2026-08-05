@@ -6,6 +6,16 @@ spring:
     serialization:
       indent_output: true
 
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+github:
+  webhook:
+    secret: ${GITHUB_WEBHOOK_SECRET:dev-secret-change-in-production}
+
 architectai:
   ai:
     default-provider: ${AI_DEFAULT_PROVIDER:openai}
@@ -21,10 +31,41 @@ architectai:
       api-key: ${GEMINI_API_KEY:}
       model: ${GEMINI_MODEL:gemini-1.5-pro}
       base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+  static-analysis:
+    tools:
+      spotbugs:
+        enabled: true
+        path: ${SPOTBUGS_PATH:}
+        timeout-seconds: 60
+      pmd:
+        enabled: true
+        path: ${PMD_PATH:}
+        timeout-seconds: 60
+      checkstyle:
+        enabled: true
+        path: ${CHECKSTYLE_PATH:}
+        timeout-seconds: 30
+      semgrep:
+        enabled: true
+        path: ${SEMGREP_PATH:}
+        timeout-seconds: 120
+    thresholds:
+      max-line-length: 120
+      max-file-lines: 400
+      max-method-lines: 80
+  runtime:
+    workspace-dir: ${ARCHITECTAI_RUNTIME_WORKSPACE_DIR:./workspace}
+    reports-dir: ${ARCHITECTAI_RUNTIME_REPORTS_DIR:./.architectai/reports}
 
-github:
-  webhook:
-    secret: ${GITHUB_WEBHOOK_SECRET:dev-secret-change-in-production}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
 
 logging:
   level:

@@ -18,6 +18,11 @@ mvn -DskipTests spring-boot:run
 
 A aplicação inicia em `http://localhost:8080`.
 
+## Swagger / OpenAPI
+
+- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+- OpenAPI JSON: `http://localhost:8080/api-docs`
+
 ## Arquitetura — Fluxo de Pipeline
 
 1. **Cliente cria projeto** via `POST /api/v1/projects`
@@ -32,9 +37,9 @@ A aplicação inicia em `http://localhost:8080`.
    - Muda status para `CLONING`
    - Executa `GitService.cloneRepositoryForAnalysis()`
    - Muda status para `ANALYZING`
-   - (TODO) Executa pipeline de análise estática (SpotBugs, PMD, etc.)
+   - Executa agentes IA (tecnicos + comerciais)
    - Muda status para `COMPLETED` ou `FAILED`
-   - Persiste relatório (placeholder: S3)
+   - Gera um PDF unico consolidado (capa + indice + secoes por agente) e manifest
 
 4. **Cliente consulta status** via `GET /api/v1/analyses/{id}`
    - Retorna JSON com status atual, timestamps, resultados
@@ -94,10 +99,15 @@ curl http://localhost:8080/api/v1/analyses/{id}
 curl http://localhost:8080/api/v1/projects/{projectId}/analyses
 ```
 
-**GET /api/v1/analyses/{id}/report** — Download do relatório (quando completed)
-- Status `COMPLETED`: retorna URL do relatório
+**GET /api/v1/analyses/{id}/report** — URL do relatório técnico principal
+- Status `COMPLETED`: retorna URL do relatório técnico
 - Status `FAILED`: retorna mensagem de erro
 - Status em processamento: retorna 202 Accepted
+
+**GET /api/v1/analyses/{id}/reports** — Artefatos da análise
+- `technicalReport`: PDF unico consolidado
+- `commercialReport`: reservado (vazio no modo PDF unico)
+- `manifest`: índice completo dos arquivos gerados
 
 **GET /api/v1/queue/size** — Tamanho atual da fila (monitoramento)
 ```bash
@@ -187,6 +197,12 @@ Em produção:
 - `ANALYZING` — Pipeline de análise estática em execução
 - `COMPLETED` — Análise concluída com sucesso
 - `FAILED` — Erro durante processamento
+
+## Equipes de agentes
+
+- Tecnicos: Software Architect, Java, Quality Control, Security, Performance, DevOps, Database, Tech Lead
+- Comerciais: Proposal Architect, Pricing & Packaging Analyst, Commercial Tech Lead
+- Endpoint: `GET /api/v1/agents` (retorna `technicalCount`, `commercialCount` e `domain` por agente)
 
 ## Próximos Passos
 

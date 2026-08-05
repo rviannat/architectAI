@@ -186,11 +186,24 @@ spring:
 github:
   webhook:
     secret: ${GITHUB_WEBHOOK_SECRET:dev-secret-32-chars-min}
+
+architectai:
+  runtime:
+    workspace-dir: ${ARCHITECTAI_RUNTIME_WORKSPACE_DIR:./workspace}
+    reports-dir: ${ARCHITECTAI_RUNTIME_REPORTS_DIR:./.architectai/reports}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
 ```
 
 ### Variáveis de Ambiente
 ```powershell
 $env:GITHUB_WEBHOOK_SECRET = "seu-secret-aqui"
+$env:ARCHITECTAI_RUNTIME_WORKSPACE_DIR = "./workspace"
+$env:ARCHITECTAI_RUNTIME_REPORTS_DIR = "./.architectai/reports"
 ```
 
 ## Performance (MVP)

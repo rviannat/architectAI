@@ -1,6 +1,10 @@
 package com.architectai.backend.model;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class Analysis {
     private String id;
@@ -15,7 +19,12 @@ public class Analysis {
     private String errorMessage; // if status = FAILED
     private Integer findingsCount;
     private String reportUrl; // URL to generated PDF
+    private String commercialReportUrl; // URL to generated commercial PDF
+    private String manifestUrl; // path to report manifest
     private Long estimatedCostRs; // estimated cost in R$
+    private String staticAnalysisReportUrl;
+    private Map<String, Integer> staticAnalysisFindingsByTool = new LinkedHashMap<>();
+    private List<Finding> findings = new ArrayList<>();
 
     public Analysis() {}
 
@@ -65,7 +74,24 @@ public class Analysis {
     public String getReportUrl() { return reportUrl; }
     public void setReportUrl(String reportUrl) { this.reportUrl = reportUrl; }
 
+    public String getCommercialReportUrl() { return commercialReportUrl; }
+    public void setCommercialReportUrl(String commercialReportUrl) { this.commercialReportUrl = commercialReportUrl; }
+
+    public String getManifestUrl() { return manifestUrl; }
+    public void setManifestUrl(String manifestUrl) { this.manifestUrl = manifestUrl; }
+
     public Long getEstimatedCostRs() { return estimatedCostRs; }
     public void setEstimatedCostRs(Long estimatedCostRs) { this.estimatedCostRs = estimatedCostRs; }
+
+    public String getStaticAnalysisReportUrl() { return staticAnalysisReportUrl; }
+    public void setStaticAnalysisReportUrl(String staticAnalysisReportUrl) { this.staticAnalysisReportUrl = staticAnalysisReportUrl; }
+
+    public Map<String, Integer> getStaticAnalysisFindingsByTool() { return new LinkedHashMap<>(staticAnalysisFindingsByTool); }
+    public void setStaticAnalysisFindingsByTool(Map<String, Integer> staticAnalysisFindingsByTool) {
+        this.staticAnalysisFindingsByTool = staticAnalysisFindingsByTool == null ? new LinkedHashMap<>() : new LinkedHashMap<>(staticAnalysisFindingsByTool);
+    }
+
+    public List<Finding> getFindings() { return new ArrayList<>(findings); }
+    public void setFindings(List<Finding> findings) { this.findings = findings == null ? new ArrayList<>() : new ArrayList<>(findings); }
 }
 

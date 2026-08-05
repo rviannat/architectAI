@@ -1,14 +1,18 @@
 package com.architectai.backend.service;
 
+import com.architectai.backend.config.RuntimeProperties;
 import com.architectai.backend.ai.AgentResponse;
 import com.architectai.backend.model.Analysis;
 import com.architectai.backend.model.Project;
 import com.itextpdf.io.font.constants.StandardFonts;
+import com.itextpdf.kernel.geom.Rectangle;
 import com.itextpdf.kernel.font.PdfFont;
 import com.itextpdf.kernel.font.PdfFontFactory;
 import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfPage;
 import com.itextpdf.kernel.pdf.PdfWriter;
 import com.itextpdf.kernel.pdf.canvas.draw.SolidLine;
+import com.itextpdf.layout.Canvas;
 import com.itextpdf.layout.Document;
 import com.itextpdf.layout.element.*;
 import com.itextpdf.layout.properties.*;
@@ -24,6 +28,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,32 +41,52 @@ import java.util.Objects;
 @Service
 public class ReportService {
 
-    private static final String REPORTS_DIR = "./.architectai/reports";
     private static final DateTimeFormatter PDF_DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
     private static final long MIN_PDF_SIZE_BYTES = 512;
+
+    private final RuntimeProperties runtimeProperties;
+
+    public ReportService(RuntimeProperties runtimeProperties) {
+        this.runtimeProperties = runtimeProperties;
+    }
+
+    private record TocEntry(String title, int page) {}
+
+    public record ReportBundle(
+        String technicalMasterReportPath,
+        String commercialMasterReportPath,
+        String manifestPath,
+        Map<String, String> agentReportPaths
+    ) {}
 
     /**
      * Gera relatório PDF profissional
      */
     public String generatePDFReport(Analysis analysis, Project project, Map<String, AgentResponse> agentResponses) {
+        return generateReportBundle(analysis, project, agentResponses).technicalMasterReportPath();
+    }
+
+    public ReportBundle generateReportBundle(Analysis analysis, Project project, Map<String, AgentResponse> agentResponses) {
         try {
             ensureReportDirectory();
 
-            Path analysisDir = Paths.get(REPORTS_DIR, "analysis_" + analysis.getId());
+            Path analysisDir = Paths.get(runtimeProperties.getReportsDir(), "analysis_" + analysis.getId());
             Files.createDirectories(analysisDir);
 
-            Map<String, Path> perAgentReports = new LinkedHashMap<>();
-            for (Map.Entry<String, AgentResponse> entry : agentResponses.entrySet()) {
-                Path agentReportPath = generateAgentReportPdf(analysisDir, analysis, project, entry.getKey(), entry.getValue());
-                perAgentReports.put(entry.getKey(), agentReportPath);
-            }
+            Path unifiedReportPath = generateUnifiedReportPdf(analysisDir, analysis, project, agentResponses);
+            Path manifestPath = writeUnifiedManifest(analysisDir, analysis, unifiedReportPath, agentResponses);
 
-            Path masterReportPath = generateMasterReportPdf(analysisDir, analysis, project, agentResponses, perAgentReports);
-            writeManifest(analysisDir, analysis, perAgentReports, masterReportPath);
+            String unifiedAbsolutePath = unifiedReportPath.toAbsolutePath().normalize().toString();
+            Map<String, String> agentPaths = new LinkedHashMap<>();
+            agentPaths.put("Unified Report", unifiedAbsolutePath);
 
-            String absolutePath = masterReportPath.toAbsolutePath().normalize().toString();
-            log.info("Relatorios gerados para analise {}. Master: {}", analysis.getId(), absolutePath);
-            return absolutePath;
+            log.info("Relatorio unico gerado para analise {}. PDF: {}", analysis.getId(), unifiedAbsolutePath);
+            return new ReportBundle(
+                unifiedAbsolutePath,
+                "",
+                manifestPath.toAbsolutePath().normalize().toString(),
+                agentPaths
+            );
             
         } catch (Exception e) {
             log.error("Erro ao gerar PDF: {}", e.getMessage(), e);
@@ -69,14 +94,145 @@ public class ReportService {
         }
     }
 
+    private Path generateUnifiedReportPdf(
+        Path analysisDir,
+        Analysis analysis,
+        Project project,
+        Map<String, AgentResponse> agentResponses
+    ) throws IOException {
+        String filename = "report_unified_" + analysis.getId() + "_" + System.currentTimeMillis() + ".pdf";
+        Path outputPath = analysisDir.resolve(filename);
+        Path tempOutputPath = outputPath.resolveSibling(outputPath.getFileName() + ".tmp");
+
+        Map<String, AgentResponse> technicalResponses = new LinkedHashMap<>();
+        Map<String, AgentResponse> commercialResponses = new LinkedHashMap<>();
+        partitionResponsesByDomain(agentResponses, technicalResponses, commercialResponses);
+
+        List<Map.Entry<String, AgentResponse>> orderedAgents = agentResponses.entrySet().stream()
+            .sorted(Comparator
+                .comparing((Map.Entry<String, AgentResponse> entry) -> isCommercialResponse(entry.getValue()))
+                .thenComparing(Map.Entry::getKey))
+            .toList();
+
+        try (PdfWriter writer = new PdfWriter(tempOutputPath.toString());
+             PdfDocument pdf = new PdfDocument(writer);
+             Document document = new Document(pdf)) {
+
+            document.setMargins(40, 40, 40, 40);
+            PdfFont fontBold = PdfFontFactory.createFont(StandardFonts.HELVETICA_BOLD);
+            PdfFont fontNormal = PdfFontFactory.createFont(StandardFonts.HELVETICA);
+
+            List<TocEntry> tocEntries = new ArrayList<>();
+
+            addCoverPage(document, fontBold, fontNormal, project, analysis, "RELATORIO UNICO INTEGRADO");
+            document.add(new AreaBreak());
+            document.add(new AreaBreak());
+
+            tocEntries.add(new TocEntry("Sumario Executivo Tecnico", pdf.getNumberOfPages()));
+            addExecutiveSummary(document, fontBold, fontNormal, technicalResponses.isEmpty() ? agentResponses : technicalResponses, "TECHNICAL");
+            document.add(new AreaBreak());
+
+            if (!commercialResponses.isEmpty()) {
+                tocEntries.add(new TocEntry("Sumario Executivo Comercial", pdf.getNumberOfPages()));
+                addExecutiveSummary(document, fontBold, fontNormal, commercialResponses, "COMMERCIAL");
+                document.add(new AreaBreak());
+            }
+
+            tocEntries.add(new TocEntry("Roadmap Priorizado", pdf.getNumberOfPages()));
+            addRoadmap(document, fontBold, fontNormal, technicalResponses.isEmpty() ? agentResponses : technicalResponses, "TECHNICAL");
+            document.add(new AreaBreak());
+
+            if (!commercialResponses.isEmpty()) {
+                tocEntries.add(new TocEntry("Plano Executivo Comercial", pdf.getNumberOfPages()));
+                addCommercialProposalSection(document, fontBold, fontNormal, commercialResponses);
+                document.add(new AreaBreak());
+            }
+
+            for (int i = 0; i < orderedAgents.size(); i++) {
+                Map.Entry<String, AgentResponse> entry = orderedAgents.get(i);
+                String domain = isCommercialResponse(entry.getValue()) ? "COMERCIAL" : "TECNICO";
+                tocEntries.add(new TocEntry("Agente: " + entry.getKey() + " [" + domain + "]", pdf.getNumberOfPages()));
+                addSingleAgentSection(document, fontBold, fontNormal, entry.getKey(), entry.getValue());
+                if (i < orderedAgents.size() - 1) {
+                    document.add(new AreaBreak());
+                }
+            }
+
+            renderIndexPage(pdf, fontBold, fontNormal, tocEntries);
+        }
+
+        return finalizePdf(tempOutputPath, outputPath);
+    }
+
+    private void renderIndexPage(
+        PdfDocument pdf,
+        PdfFont fontBold,
+        PdfFont fontNormal,
+        List<TocEntry> tocEntries
+    ) {
+        PdfPage indexPage = pdf.getPage(2);
+        Rectangle pageSize = indexPage.getPageSize();
+        Rectangle area = new Rectangle(40, 40, pageSize.getWidth() - 80, pageSize.getHeight() - 80);
+
+        try (Canvas canvas = new Canvas(indexPage, area)) {
+            canvas.add(new Paragraph("INDICE").setFont(fontBold).setFontSize(20).setMarginBottom(16));
+            canvas.add(new Paragraph("Navegacao do relatorio consolidado").setFont(fontNormal).setFontSize(10).setMarginBottom(12));
+
+            for (TocEntry entry : tocEntries) {
+                String line = buildTocLine(entry.title(), entry.page());
+                canvas.add(new Paragraph(line)
+                    .setFont(fontNormal)
+                    .setFontSize(10)
+                    .setMarginBottom(2));
+            }
+        }
+    }
+
+    private String buildTocLine(String title, int page) {
+        String dots = ".".repeat(60);
+        String base = title.length() > 52 ? title.substring(0, 52) + "..." : title;
+        return base + " " + dots + " " + page;
+    }
+
+    private void addSingleAgentSection(
+        Document document,
+        PdfFont fontBold,
+        PdfFont fontNormal,
+        String agentName,
+        AgentResponse agentResponse
+    ) {
+        String domain = isCommercialResponse(agentResponse) ? "COMERCIAL" : "TECNICO";
+        document.add(new Paragraph(agentName + " - " + domain)
+            .setFont(fontBold)
+            .setFontSize(18)
+            .setMarginBottom(8));
+
+        document.add(new Paragraph(Objects.toString(agentResponse.summary(), "Sem resumo retornado."))
+            .setFont(fontNormal)
+            .setFontSize(10)
+            .setMarginBottom(12));
+
+        document.add(new Paragraph("Arquivos elegiveis").setFont(fontBold).setFontSize(12));
+        addEligibleFilesList(document, fontNormal, agentResponse);
+
+        document.add(new Paragraph("\nFindings").setFont(fontBold).setFontSize(12));
+        addAgentFindings(document, fontNormal, agentResponse);
+
+        document.add(new Paragraph("\nRecomendacoes").setFont(fontBold).setFontSize(12));
+        addAgentRecommendations(document, fontNormal, agentResponse);
+    }
+
     private Path generateMasterReportPdf(
         Path analysisDir,
         Analysis analysis,
         Project project,
         Map<String, AgentResponse> agentResponses,
-        Map<String, Path> perAgentReports
+        Map<String, Path> perAgentReports,
+        String reportTitle,
+        String reportScope
     ) throws IOException {
-        String filename = "report_master_" + analysis.getId() + "_" + System.currentTimeMillis() + ".pdf";
+        String suffix = "COMMERCIAL".equals(reportScope) ? "commercial" : "technical";
+        String filename = "report_master_" + suffix + "_" + analysis.getId() + "_" + System.currentTimeMillis() + ".pdf";
         Path outputPath = analysisDir.resolve(filename);
         Path tempOutputPath = outputPath.resolveSibling(outputPath.getFileName() + ".tmp");
 
@@ -90,13 +246,13 @@ public class ReportService {
             PdfFont fontNormal = PdfFontFactory.createFont(StandardFonts.HELVETICA);
             PdfFont fontSmall = PdfFontFactory.createFont(StandardFonts.HELVETICA_OBLIQUE);
 
-            addCoverPage(document, fontBold, fontNormal, project, analysis);
+            addCoverPage(document, fontBold, fontNormal, project, analysis, reportTitle);
             document.add(new AreaBreak());
 
-            addExecutiveSummary(document, fontBold, fontNormal, agentResponses);
+            addExecutiveSummary(document, fontBold, fontNormal, agentResponses, reportScope);
             document.add(new AreaBreak());
 
-            addGeneratedReportsSection(document, fontBold, fontNormal, perAgentReports);
+            addGeneratedReportsSection(document, fontBold, fontNormal, perAgentReports, reportScope);
             document.add(new AreaBreak());
 
             addSystemOverview(document, fontBold, fontNormal, project);
@@ -105,13 +261,69 @@ public class ReportService {
             addMainFindings(document, fontBold, fontNormal, fontSmall, agentResponses);
             document.add(new AreaBreak());
 
-            addRoadmap(document, fontBold, fontNormal, agentResponses);
+            addRoadmap(document, fontBold, fontNormal, agentResponses, reportScope);
             document.add(new AreaBreak());
+
+            if ("COMMERCIAL".equals(reportScope)) {
+                addCommercialProposalSection(document, fontBold, fontNormal, agentResponses);
+                document.add(new AreaBreak());
+            }
 
             addDetailedRecommendations(document, fontBold, fontNormal, agentResponses);
         }
 
         return finalizePdf(tempOutputPath, outputPath);
+    }
+
+    private void partitionResponsesByDomain(
+        Map<String, AgentResponse> source,
+        Map<String, AgentResponse> technicalTarget,
+        Map<String, AgentResponse> commercialTarget
+    ) {
+        for (Map.Entry<String, AgentResponse> entry : source.entrySet()) {
+            if (isCommercialResponse(entry.getValue())) {
+                commercialTarget.put(entry.getKey(), entry.getValue());
+            } else {
+                technicalTarget.put(entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    private boolean isCommercialResponse(AgentResponse response) {
+        Map<String, Object> metadata = response.metadata() == null ? Map.of() : response.metadata();
+        Object domain = metadata.get("agent_domain");
+        if (domain != null && "COMMERCIAL".equalsIgnoreCase(domain.toString())) {
+            return true;
+        }
+
+        String type = response.agentType();
+        if (type == null) {
+            return false;
+        }
+        return type.startsWith("PROPOSAL_")
+            || type.startsWith("PRICING_")
+            || type.startsWith("COMMERCIAL_");
+    }
+
+    private Path writeUnifiedManifest(
+        Path analysisDir,
+        Analysis analysis,
+        Path unifiedReportPath,
+        Map<String, AgentResponse> agentResponses
+    ) throws IOException {
+        Path manifestPath = analysisDir.resolve("manifest_" + analysis.getId() + ".md");
+        StringBuilder sb = new StringBuilder();
+        sb.append("# Manifest de Relatorios\n\n");
+        sb.append("Analise: ").append(analysis.getId()).append("\n");
+        sb.append("Gerado em: ").append(LocalDateTime.now().format(PDF_DATE_FORMAT)).append("\n\n");
+        sb.append("## Relatorio Unico\n");
+        sb.append("- ").append(unifiedReportPath.toAbsolutePath()).append("\n\n");
+        sb.append("## Agentes incluidos\n");
+        for (String agent : agentResponses.keySet()) {
+            sb.append("- ").append(agent).append("\n");
+        }
+        Files.writeString(manifestPath, sb.toString());
+        return manifestPath;
     }
 
     private Path generateAgentReportPdf(
@@ -201,14 +413,18 @@ public class ReportService {
         }
     }
 
-    private void addGeneratedReportsSection(Document document, PdfFont fontBold, PdfFont fontNormal, Map<String, Path> perAgentReports) {
+    private void addGeneratedReportsSection(Document document, PdfFont fontBold, PdfFont fontNormal, Map<String, Path> perAgentReports, String reportScope) {
         Paragraph heading = new Paragraph("ARTEFATOS GERADOS")
             .setFont(fontBold)
             .setFontSize(18)
             .setMarginBottom(20);
         document.add(heading);
 
-        Paragraph description = new Paragraph("A analise gerou um relatorio especializado por agente e este relatorio consolidado final.")
+        String scopeText = "COMMERCIAL".equals(reportScope)
+            ? "Este pacote mostra o consolidado executivo/comercial e os anexos por agente."
+            : "Este pacote mostra o consolidado tecnico e os anexos por agente.";
+
+        Paragraph description = new Paragraph(scopeText)
             .setFont(fontNormal)
             .setFontSize(11)
             .setMarginBottom(10);
@@ -286,7 +502,12 @@ public class ReportService {
 
     @SuppressWarnings("unchecked")
     private List<String> extractEligibleFiles(AgentResponse agentResponse) {
-        Object value = agentResponse.metadata().get("eligible_files");
+        Map<String, Object> metadata = agentResponse.metadata();
+        if (metadata == null) {
+            return List.of();
+        }
+
+        Object value = metadata.get("eligible_files");
         if (value instanceof List<?> listValue) {
             List<String> files = new ArrayList<>();
             for (Object item : listValue) {
@@ -307,24 +528,33 @@ public class ReportService {
             .replaceAll("_$", "");
     }
 
-    private void writeManifest(Path analysisDir, Analysis analysis, Map<String, Path> perAgentReports, Path masterReport) throws IOException {
+    private Path writeManifest(Path analysisDir, Analysis analysis, Map<String, Path> perAgentReports, Path technicalMasterReport, Path commercialMasterReport) throws IOException {
         Path manifestPath = analysisDir.resolve("manifest_" + analysis.getId() + ".md");
         StringBuilder sb = new StringBuilder();
         sb.append("# Manifest de Relatorios\n\n");
         sb.append("Analise: ").append(analysis.getId()).append("\n");
         sb.append("Gerado em: ").append(LocalDateTime.now().format(PDF_DATE_FORMAT)).append("\n\n");
-        sb.append("## Relatorio Geral\n");
-        sb.append("- ").append(masterReport.toAbsolutePath()).append("\n\n");
+        sb.append("## Relatorio Geral Tecnico\n");
+        sb.append("- ").append(technicalMasterReport.toAbsolutePath()).append("\n\n");
+
+        sb.append("## Relatorio Geral Comercial\n");
+        if (commercialMasterReport != null) {
+            sb.append("- ").append(commercialMasterReport.toAbsolutePath()).append("\n\n");
+        } else {
+            sb.append("- Nao gerado (nenhum agente comercial executado)\n\n");
+        }
+
         sb.append("## Relatorios por Agente\n");
         for (Map.Entry<String, Path> entry : perAgentReports.entrySet()) {
             sb.append("- ").append(entry.getKey()).append(": ").append(entry.getValue().toAbsolutePath()).append("\n");
         }
         Files.writeString(manifestPath, sb.toString());
+        return manifestPath;
     }
 
     // ===== SEÇÕES DO PDF =====
 
-    private void addCoverPage(Document document, PdfFont fontBold, PdfFont fontNormal, Project project, Analysis analysis) throws IOException {
+    private void addCoverPage(Document document, PdfFont fontBold, PdfFont fontNormal, Project project, Analysis analysis, String reportTitle) throws IOException {
         // Logo/Título
         Paragraph title = new Paragraph("ARCHITECT AI")
             .setFont(fontBold)
@@ -337,8 +567,15 @@ public class ReportService {
             .setFont(fontNormal)
             .setFontSize(12)
             .setTextAlignment(TextAlignment.CENTER)
-            .setMarginBottom(60);
+            .setMarginBottom(10);
         document.add(subtitle);
+
+        Paragraph reportType = new Paragraph(reportTitle)
+            .setFont(fontBold)
+            .setFontSize(14)
+            .setTextAlignment(TextAlignment.CENTER)
+            .setMarginBottom(40);
+        document.add(reportType);
         
         document.add(new LineSeparator(new SolidLine(1)));
         
@@ -361,7 +598,7 @@ public class ReportService {
         document.add(footer);
     }
 
-    private void addExecutiveSummary(Document document, PdfFont fontBold, PdfFont fontNormal, Map<String, AgentResponse> agentResponses) {
+    private void addExecutiveSummary(Document document, PdfFont fontBold, PdfFont fontNormal, Map<String, AgentResponse> agentResponses, String reportScope) {
         Paragraph heading = new Paragraph("SUMÁRIO EXECUTIVO")
             .setFont(fontBold)
             .setFontSize(18)
@@ -394,7 +631,11 @@ public class ReportService {
         
         document.add(new Paragraph("\n"));
         
-        Paragraph summary = new Paragraph("Análise técnica completa realizada por " + agentResponses.size() + " especialistas em arquitetura, código, segurança e desempenho. O relatório consolida as principais descobertas e recomendações estratégicas para melhorar a qualidade, segurança e escalabilidade do software.")
+        String summaryText = "COMMERCIAL".equals(reportScope)
+            ? "Analise executiva comercial realizada por agentes especializados para converter riscos tecnicos em oportunidade de receita, preservacao de margem e reducao de risco financeiro."
+            : "Análise técnica completa realizada por " + agentResponses.size() + " especialistas em arquitetura, código, segurança e desempenho. O relatório consolida as principais descobertas e recomendações estratégicas para melhorar a qualidade, segurança e escalabilidade do software.";
+
+        Paragraph summary = new Paragraph(summaryText)
             .setFont(fontNormal)
             .setFontSize(11)
             .setMarginBottom(20);
@@ -471,14 +712,18 @@ public class ReportService {
         }
     }
 
-    private void addRoadmap(Document document, PdfFont fontBold, PdfFont fontNormal, Map<String, AgentResponse> agentResponses) {
+    private void addRoadmap(Document document, PdfFont fontBold, PdfFont fontNormal, Map<String, AgentResponse> agentResponses, String reportScope) {
         Paragraph heading = new Paragraph("ROADMAP PRIORIZADO")
             .setFont(fontBold)
             .setFontSize(18)
             .setMarginBottom(20);
         document.add(heading);
         
-        Paragraph phase1 = new Paragraph("Fase 1: Quick Wins (Próximas 2 semanas)")
+        String phase1Title = "COMMERCIAL".equals(reportScope)
+            ? "Fase 1: Conversao e Proposta (Proximas 2 semanas)"
+            : "Fase 1: Quick Wins (Próximas 2 semanas)";
+
+        Paragraph phase1 = new Paragraph(phase1Title)
             .setFont(fontBold)
             .setFontSize(12)
             .setMarginBottom(10);
@@ -499,7 +744,11 @@ public class ReportService {
         
         document.add(new Paragraph("\n"));
         
-        Paragraph phase2 = new Paragraph("Fase 2: Médio Prazo (1-2 meses)")
+        String phase2Title = "COMMERCIAL".equals(reportScope)
+            ? "Fase 2: Expansao de Conta (30/60/90 dias)"
+            : "Fase 2: Médio Prazo (1-2 meses)";
+
+        Paragraph phase2 = new Paragraph(phase2Title)
             .setFont(fontBold)
             .setFontSize(12)
             .setMarginBottom(10);
@@ -525,6 +774,83 @@ public class ReportService {
                 .setFontSize(10)
                 .setMarginLeft(10));
         }
+    }
+
+    private void addCommercialProposalSection(Document document, PdfFont fontBold, PdfFont fontNormal, Map<String, AgentResponse> agentResponses) {
+        Paragraph heading = new Paragraph("PLANO EXECUTIVO COMERCIAL")
+            .setFont(fontBold)
+            .setFontSize(18)
+            .setMarginBottom(20);
+        document.add(heading);
+
+        long criticalOrHigh = agentResponses.values().stream()
+            .flatMap(r -> r.findings().stream())
+            .filter(f -> "CRITICAL".equalsIgnoreCase(f.severity()) || "HIGH".equalsIgnoreCase(f.severity()))
+            .count();
+
+        long totalEffort = agentResponses.values().stream()
+            .flatMap(r -> r.findings().stream())
+            .map(AgentResponse.Finding::estimatedEffortHours)
+            .filter(Objects::nonNull)
+            .mapToLong(Integer::longValue)
+            .sum();
+
+        Table proposalTable = new Table(2);
+        proposalTable.setWidth(UnitValue.createPercentValue(100));
+        addTableRow(proposalTable, "Risco tecnico prioritario:", criticalOrHigh + " itens de alto impacto");
+        addTableRow(proposalTable, "Esforco consolidado estimado:", totalEffort + " horas");
+        addTableRow(proposalTable, "Pacote sugerido:", "Auditoria + Plano de execucao 30/60/90 dias");
+        addTableRow(proposalTable, "Modelo comercial:", "Projeto inicial + acompanhamento mensal");
+        document.add(proposalTable);
+
+        document.add(new Paragraph("\nAcoes comerciais recomendadas")
+            .setFont(fontBold)
+            .setFontSize(12)
+            .setMarginTop(12)
+            .setMarginBottom(8));
+
+        document.add(new Paragraph("- Estruturar proposta em 3 pacotes (Essencial, Avancado, Enterprise) com precificacao por valor.")
+            .setFont(fontNormal)
+            .setFontSize(10)
+            .setMarginBottom(4));
+        document.add(new Paragraph("- Priorizar fechamento de quick wins para reduzir risco e provar ROI em ate 30 dias.")
+            .setFont(fontNormal)
+            .setFontSize(10)
+            .setMarginBottom(4));
+        document.add(new Paragraph("- Ofertar plano mensal de governanca tecnica/comercial para expansao de conta.")
+            .setFont(fontNormal)
+            .setFontSize(10)
+            .setMarginBottom(4));
+
+        document.add(new Paragraph("\nMATRIZ IMPACTO X RECEITA X ESFORCO")
+            .setFont(fontBold)
+            .setFontSize(12)
+            .setMarginTop(12)
+            .setMarginBottom(8));
+
+        Table matrix = new Table(4);
+        matrix.setWidth(UnitValue.createPercentValue(100));
+        matrix.addHeaderCell(new Cell().add(new Paragraph("Prioridade").setBold().setFontSize(10)));
+        matrix.addHeaderCell(new Cell().add(new Paragraph("Impacto").setBold().setFontSize(10)));
+        matrix.addHeaderCell(new Cell().add(new Paragraph("Receita/Oportunidade").setBold().setFontSize(10)));
+        matrix.addHeaderCell(new Cell().add(new Paragraph("Esforco").setBold().setFontSize(10)));
+
+        matrix.addCell(new Cell().add(new Paragraph("P1").setFontSize(10)));
+        matrix.addCell(new Cell().add(new Paragraph("Reducao imediata de risco operacional").setFontSize(10)));
+        matrix.addCell(new Cell().add(new Paragraph("Aumenta confianca para fechar projeto inicial").setFontSize(10)));
+        matrix.addCell(new Cell().add(new Paragraph("Baixo a medio").setFontSize(10)));
+
+        matrix.addCell(new Cell().add(new Paragraph("P2").setFontSize(10)));
+        matrix.addCell(new Cell().add(new Paragraph("Estabilizacao de qualidade e entrega").setFontSize(10)));
+        matrix.addCell(new Cell().add(new Paragraph("Abre espaco para upsell de acompanhamento mensal").setFontSize(10)));
+        matrix.addCell(new Cell().add(new Paragraph("Medio").setFontSize(10)));
+
+        matrix.addCell(new Cell().add(new Paragraph("P3").setFontSize(10)));
+        matrix.addCell(new Cell().add(new Paragraph("Escalabilidade e governanca de longo prazo").setFontSize(10)));
+        matrix.addCell(new Cell().add(new Paragraph("Sustenta expansao de contrato Enterprise").setFontSize(10)));
+        matrix.addCell(new Cell().add(new Paragraph("Medio a alto").setFontSize(10)));
+
+        document.add(matrix);
     }
 
     private void addDetailedRecommendations(Document document, PdfFont fontBold, PdfFont fontNormal, Map<String, AgentResponse> agentResponses) {
@@ -559,7 +885,7 @@ public class ReportService {
     // ===== MÉTODOS AUXILIARES =====
 
     private void ensureReportDirectory() throws IOException {
-        Files.createDirectories(Paths.get(REPORTS_DIR));
+        Files.createDirectories(Paths.get(runtimeProperties.getReportsDir()));
     }
 
     private void addInfoRow(Document document, PdfFont fontBold, PdfFont fontNormal, String label, String value) {

@@ -4,6 +4,7 @@ import com.architectai.backend.model.Analysis;
 import com.architectai.backend.service.AnalysisService;
 import com.architectai.backend.service.ProjectService;
 import com.architectai.backend.util.WebhookSecurityUtil;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -17,14 +18,16 @@ public class WebhookController {
 
     private final ProjectService projectService;
     private final AnalysisService analysisService;
+    private final ObjectMapper objectMapper;
 
     @Value("${github.webhook.secret:dev-secret-change-in-production}")
     private String webhookSecret;
 
     @Autowired
-    public WebhookController(ProjectService projectService, AnalysisService analysisService) {
+    public WebhookController(ProjectService projectService, AnalysisService analysisService, ObjectMapper objectMapper) {
         this.projectService = projectService;
         this.analysisService = analysisService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -43,9 +46,7 @@ public class WebhookController {
                 return ResponseEntity.status(400).body("Invalid or missing signature");
             }
 
-            // Parse JSON payload (usando Jackson internamente)
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            Map<String, Object> payload = mapper.readValue(rawPayload, Map.class);
+            Map<String, Object> payload = objectMapper.readValue(rawPayload, Map.class);
 
             // Extrair informações do repositório
             Map<String, Object> repo = (Map<String, Object>) payload.get("repository");
@@ -61,10 +62,7 @@ public class WebhookController {
             }
 
             String ref = (String) payload.get("ref");
-            String branch = "main";
-            if (ref != null && ref.contains("/")) {
-                branch = ref.substring(ref.lastIndexOf('/') + 1);
-            }
+            String branch = extractBranch(ref);
 
             // Criar ou atualizar projeto
             String projectId = projectService.createProject(cloneUrl, branch).getId();
@@ -82,6 +80,19 @@ public class WebhookController {
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Webhook processing failed: " + e.getMessage());
         }
+    }
+
+    private String extractBranch(String ref) {
+        if (ref == null || ref.isBlank()) {
+            return "main";
+        }
+        if (ref.startsWith("refs/heads/")) {
+            return ref.substring("refs/heads/".length());
+        }
+        if (ref.contains("/")) {
+            return ref.substring(ref.lastIndexOf('/') + 1);
+        }
+        return ref;
     }
 
     /**

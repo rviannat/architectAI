@@ -1,6 +1,7 @@
 package com.architectai.backend.service;
 
 import com.architectai.backend.model.Analysis;
+import com.architectai.backend.model.Finding;
 import com.architectai.backend.model.Project;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -84,12 +85,44 @@ public class AnalysisService {
      * Atualiza campos de análise após conclusão
      */
     public void completeAnalysis(String analysisId, String repositoryPath, Integer findingsCount, String reportUrl, Long estimatedCostRs) {
+        completeAnalysis(analysisId, repositoryPath, findingsCount, reportUrl, "", "", estimatedCostRs, List.of(), Map.of(), null);
+    }
+
+    public void completeAnalysis(
+        String analysisId,
+        String repositoryPath,
+        Integer findingsCount,
+        String reportUrl,
+        String commercialReportUrl,
+        String manifestUrl,
+        Long estimatedCostRs
+    ) {
+        completeAnalysis(analysisId, repositoryPath, findingsCount, reportUrl, commercialReportUrl, manifestUrl, estimatedCostRs, List.of(), Map.of(), null);
+    }
+
+    public void completeAnalysis(
+        String analysisId,
+        String repositoryPath,
+        Integer findingsCount,
+        String reportUrl,
+        String commercialReportUrl,
+        String manifestUrl,
+        Long estimatedCostRs,
+        List<Finding> findings,
+        Map<String, Integer> staticAnalysisFindingsByTool,
+        String staticAnalysisReportUrl
+    ) {
         Analysis analysis = analysisStore.get(analysisId);
         if (analysis != null) {
             analysis.setRepositoryPath(repositoryPath);
             analysis.setFindingsCount(findingsCount);
             analysis.setReportUrl(reportUrl);
+            analysis.setCommercialReportUrl(commercialReportUrl);
+            analysis.setManifestUrl(manifestUrl);
             analysis.setEstimatedCostRs(estimatedCostRs);
+            analysis.setFindings(findings);
+            analysis.setStaticAnalysisFindingsByTool(staticAnalysisFindingsByTool);
+            analysis.setStaticAnalysisReportUrl(staticAnalysisReportUrl);
             analysis.setStatus("COMPLETED");
             analysis.setFinishedAt(LocalDateTime.now());
         }

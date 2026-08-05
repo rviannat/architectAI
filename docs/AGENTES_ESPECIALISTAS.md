@@ -54,7 +54,11 @@ Sempre que um novo agente for criado/alterado, este arquivo deve ser atualizado.
 
 - `GET /api/v1/agents`
   - Controller: `backend/src/main/java/com/architectai/backend/controller/AgentController.java`
-  - Retorna especialistas registrados e referencia ao Tech Lead.
+  - Retorna especialistas registrados, dominio (`TECHNICAL`/`COMMERCIAL`) e referencia ao Tech Lead.
+
+- `GET /api/v1/analyses/{id}/reports`
+  - Controller: `backend/src/main/java/com/architectai/backend/controller/AnalysisController.java`
+  - Retorna relatorio tecnico, relatorio comercial e manifest da analise.
 
 ## Proximo padrao de atualizacao
 
@@ -77,4 +81,16 @@ Sempre que criar ou alterar agente, atualizar:
 
 - 2026-08-04 17:23
   - Ajustado prompt do `Quality Control Specialist` para foco comercial (impacto em custo, risco e velocidade de entrega).
+
+- 2026-08-04 18:10
+  - Separacao de dominios dos agentes (`TECHNICAL` e `COMMERCIAL`).
+  - Geracao de pacote de relatorios com master tecnico e master comercial.
+
+- 2026-08-04 18:32
+  - Implementado agente `Revenue Strategist` no dominio comercial.
+  - Relatorio comercial ganhou secao `PLANO EXECUTIVO COMERCIAL` com foco em proposta e ROI.
+
+- 2026-08-04 18:45
+  - Implementados agentes `Executive Account Manager` e `Board Reporting Agent` no dominio comercial.
+  - Relatorio comercial ganhou matriz `Impacto x Receita x Esforco` para priorizacao executiva.
 

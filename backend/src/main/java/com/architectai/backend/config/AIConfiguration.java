@@ -9,7 +9,7 @@ import org.springframework.web.client.RestTemplate;
  * Configuracao dos componentes de IA para os agentes especialistas.
  */
 @Configuration
-@EnableConfigurationProperties(AgentAiProperties.class)
+@EnableConfigurationProperties({AgentAiProperties.class, RuntimeProperties.class})
 public class AIConfiguration {
 
     @Bean

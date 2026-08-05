@@ -1,33 +1,92 @@
 version: '3.8'
+
 services:
   postgres:
     image: postgres:15
+    container_name: architectai-postgres
     environment:
       POSTGRES_DB: architectai
       POSTGRES_USER: architect
       POSTGRES_PASSWORD: architect
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U architect -d architectai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7
+    container_name: architectai-redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: minio/minio:latest
+    container_name: architectai-minio
+    command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data
     ports:
       - "9000:9000"
+      - "9001:9001"
     volumes:
       - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: architectai-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: container
+      GITHUB_WEBHOOK_SECRET: dev-secret-change-in-production
+      ARCHITECTAI_RUNTIME_WORKSPACE_DIR: /data/workspace
+      ARCHITECTAI_RUNTIME_REPORTS_DIR: /data/reports
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/architectai
+      SPRING_DATASOURCE_USERNAME: architect
+      SPRING_DATASOURCE_PASSWORD: architect
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "8080:8080"
+    volumes:
+      - backend-workspace:/data/workspace
+      - backend-reports:/data/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
 volumes:
   postgres-data:
   minio-data:
+  backend-workspace:
+  backend-reports:
 

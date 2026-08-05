@@ -5,6 +5,7 @@ import com.architectai.backend.ai.AgentResponse;
 import com.architectai.backend.ai.RepositoryMetadata;
 import com.architectai.backend.ai.SpecialistAgent;
 import com.architectai.backend.model.Analysis;
+import com.architectai.backend.model.Finding;
 import com.architectai.backend.model.Project;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +34,7 @@ public class AnalysisJobProcessor {
     private final ProjectService projectService;
     private final GitService gitService;
     private final ReportService reportService;
+    private final StaticAnalysisService staticAnalysisService;
     private final AIOrchestrator aiOrchestrator;
     private final List<SpecialistAgent> specialistAgents;
 
@@ -42,6 +44,7 @@ public class AnalysisJobProcessor {
             ProjectService projectService,
             GitService gitService,
             ReportService reportService,
+            StaticAnalysisService staticAnalysisService,
             AIOrchestrator aiOrchestrator,
             List<SpecialistAgent> specialistAgents
     ) {
@@ -49,6 +52,7 @@ public class AnalysisJobProcessor {
         this.projectService = projectService;
         this.gitService = gitService;
         this.reportService = reportService;
+        this.staticAnalysisService = staticAnalysisService;
         this.aiOrchestrator = aiOrchestrator;
         this.specialistAgents = specialistAgents;
         
@@ -104,8 +108,15 @@ public class AnalysisJobProcessor {
 
             // Step 3: Atualizar status para ANALYZING
             analysisService.updateAnalysisStatus(analysis.getId(), "ANALYZING");
+
+            // Step 4: Executar análise estática estruturada
+            log.info("Executando análise estática para: {}", analysis.getId());
+            StaticAnalysisResult staticAnalysisResult = staticAnalysisService.runStaticAnalysis(analysis.getId(), repositoryPath);
+
+            List<Finding> staticFindings = staticAnalysisResult.getFindings();
+            long staticFindingsCount = staticFindings.size();
             
-            // Step 4: Executar análise com agentes IA
+            // Step 5: Executar análise com agentes IA
             log.info("Executando análise com {} agentes especializados", aiOrchestrator.getRegisteredAgents().size());
             Map<String, AgentResponse> agentResponses = aiOrchestrator.analyzeWithAgents(
                 Path.of(repositoryPath),
@@ -113,29 +124,34 @@ public class AnalysisJobProcessor {
                 analysis.getId()
             );
             
-            // Step 5: Consolidar responses (Tech Lead consolidation)
+            // Step 6: Consolidar responses (Tech Lead consolidation)
             AgentResponse techLeadResponse = aiOrchestrator.getTechLeadConsolidation(agentResponses);
             agentResponses.put(techLeadResponse.agentName(), techLeadResponse);
             
-            // Step 6: Obter informações do projeto para gerar relatório
+            // Step 7: Obter informações do projeto para gerar relatório
             Project project = projectService.getProject(analysis.getProjectId());
             
-            // Step 7: Gerar relatório PDF profissional
+            // Step 8: Gerar relatório PDF profissional
             log.info("Gerando relatório PDF para análise: {}", analysis.getId());
-            String reportUrl = reportService.generatePDFReport(analysis, project, agentResponses);
+            ReportService.ReportBundle reportBundle = reportService.generateReportBundle(analysis, project, agentResponses);
             
-            // Step 8: Consolidar findings
+            // Step 9: Consolidar findings
             long totalFindings = agentResponses.values().stream()
                 .mapToLong(r -> r.findings().size())
-                .sum();
+                .sum() + staticFindingsCount;
             
-            // Step 9: Marcar análise como concluída
+            // Step 10: Marcar análise como concluída
             analysisService.completeAnalysis(
                 analysis.getId(),
                 repositoryPath,
                 (int) totalFindings,
-                reportUrl,
-                estimateCost(totalFindings)
+                reportBundle.technicalMasterReportPath(),
+                reportBundle.commercialMasterReportPath(),
+                reportBundle.manifestPath(),
+                estimateCost(totalFindings),
+                staticFindings,
+                staticAnalysisResult.getFindingsByTool(),
+                staticAnalysisResult.getConsolidatedOutputPath()
             );
             
             log.info("Análise concluída com sucesso: {}", analysis.getId());

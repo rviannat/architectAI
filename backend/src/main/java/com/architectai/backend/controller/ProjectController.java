@@ -1,6 +1,7 @@
 package com.architectai.backend.controller;
 
-import com.architectai.backend.dto.ProjectRequest;
+import com.architectai.backend.dto.ApiResponse;
+import com.architectai.backend.dto.ProjectCreateRequest;
 import com.architectai.backend.model.Project;
 import com.architectai.backend.service.GitService;
 import com.architectai.backend.service.ProjectService;
@@ -9,9 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.nio.file.Path;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1/projects")
@@ -27,17 +26,17 @@ public class ProjectController {
     }
 
     @PostMapping
-    public ResponseEntity<Project> createProject(@RequestBody ProjectRequest req) {
-        // Delegate creation to ProjectService so other services can access the project
+    public ResponseEntity<ApiResponse<Project>> createProject(@Valid @RequestBody ProjectCreateRequest req) {
         Project p = projectService.createProject(req.repoUrl(), req.defaultBranch());
-        return ResponseEntity.created(URI.create("/api/v1/projects/" + p.getId())).body(p);
+        return ResponseEntity.created(URI.create("/api/v1/projects/" + p.getId()))
+            .body(ApiResponse.of(201, "Project created", p));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Project> getProject(@PathVariable String id) {
+    public ResponseEntity<ApiResponse<Project>> getProject(@PathVariable String id) {
         Project p = projectService.getProject(id);
         if (p == null) return ResponseEntity.notFound().build();
-        return ResponseEntity.ok(p);
+        return ResponseEntity.ok(ApiResponse.of(200, "Project found", p));
     }
 
     @PostMapping("/{id}/clone")

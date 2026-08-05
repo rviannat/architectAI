@@ -35,5 +35,12 @@ public interface SpecialistAgent {
      * Retorna a ordem de execução (0 = primeiro, 100 = Tech Lead consolida)
      */
     int executionOrder();
+
+    /**
+     * Classifica o agente por dominio para segregacao de relatorios.
+     */
+    default String getAgentDomain() {
+        return "TECHNICAL";
+    }
 }
 

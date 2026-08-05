@@ -1,5 +1,6 @@
 package com.architectai.backend.service;
 
+import com.architectai.backend.config.RuntimeProperties;
 import com.architectai.backend.model.Project;
 import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.api.Git;
@@ -16,10 +17,12 @@ import java.util.UUID;
 public class GitService {
 
     private final ProjectService projectService;
+    private final RuntimeProperties runtimeProperties;
 
     @Autowired
-    public GitService(ProjectService projectService) {
+    public GitService(ProjectService projectService, RuntimeProperties runtimeProperties) {
         this.projectService = projectService;
+        this.runtimeProperties = runtimeProperties;
     }
 
     /**
@@ -72,7 +75,7 @@ public class GitService {
         }
 
         String workspaceId = projectId + "-" + UUID.randomUUID().toString().substring(0, 8);
-        Path targetDir = Path.of("./workspace").resolve(workspaceId);
+        Path targetDir = Path.of(runtimeProperties.getWorkspaceDir()).resolve(workspaceId);
         
         Path clonedPath = cloneRepository(project.getRepoUrl(), project.getDefaultBranch(), targetDir, null);
         return clonedPath.toAbsolutePath().toString();
