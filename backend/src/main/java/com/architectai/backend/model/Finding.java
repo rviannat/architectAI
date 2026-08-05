@@ -1,17 +1,51 @@
 package com.architectai.backend.model;
 
+import jakarta.persistence.AttributeConverter;
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.Converter;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
+@Entity
+@Table(name = "findings")
 public class Finding {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String persistenceId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "analysis_id")
+    private Analysis analysis;
+
+    @Column(nullable = false, length = 128)
     private String tool;
+    @Column(nullable = false, length = 128)
     private String id;
+    @Column(nullable = false, length = 128)
     private String type;
+    @Column(nullable = false, length = 32)
     private String severity;
+    @Column(length = 1024)
     private String file;
+    @Column
     private Integer line;
+    @Column(length = 4096)
     private String message;
+    @Column(length = 8192)
     private String evidence;
+    @Convert(converter = Finding.TagsConverter.class)
+    @Column(name = "tags", length = 4096)
     private List<String> tags = new ArrayList<>();
 
     public Finding() {
@@ -97,8 +131,41 @@ public class Finding {
         return tags;
     }
 
+    public String getPersistenceId() {
+        return persistenceId;
+    }
+
+    public void setPersistenceId(String persistenceId) {
+        this.persistenceId = persistenceId;
+    }
+
+    public Analysis getAnalysis() {
+        return analysis;
+    }
+
+    public void setAnalysis(Analysis analysis) {
+        this.analysis = analysis;
+    }
+
     public void setTags(List<String> tags) {
         this.tags = tags == null ? new ArrayList<>() : new ArrayList<>(tags);
+    }
+
+    @Converter
+    public static class TagsConverter implements AttributeConverter<List<String>, String> {
+        private static final String DELIMITER = ",";
+
+        @Override
+        public String convertToDatabaseColumn(List<String> tags) {
+            if (tags == null || tags.isEmpty()) return "";
+            return String.join(DELIMITER, tags);
+        }
+
+        @Override
+        public List<String> convertToEntityAttribute(String dbValue) {
+            if (dbValue == null || dbValue.isBlank()) return new ArrayList<>();
+            return new ArrayList<>(Arrays.asList(dbValue.split(DELIMITER)));
+        }
     }
 }
 

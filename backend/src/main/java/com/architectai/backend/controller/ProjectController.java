@@ -2,6 +2,7 @@ package com.architectai.backend.controller;
 
 import com.architectai.backend.dto.ApiResponse;
 import com.architectai.backend.dto.ProjectCreateRequest;
+import com.architectai.backend.config.RuntimeProperties;
 import com.architectai.backend.model.Project;
 import com.architectai.backend.service.GitService;
 import com.architectai.backend.service.ProjectService;
@@ -19,10 +20,12 @@ public class ProjectController {
     // Use ProjectService as the single source of truth for projects
     private final ProjectService projectService;
     private final GitService gitService;
+    private final RuntimeProperties runtimeProperties;
 
-    public ProjectController(ProjectService projectService, GitService gitService) {
+    public ProjectController(ProjectService projectService, GitService gitService, RuntimeProperties runtimeProperties) {
         this.projectService = projectService;
         this.gitService = gitService;
+        this.runtimeProperties = runtimeProperties;
     }
 
     @PostMapping
@@ -46,7 +49,7 @@ public class ProjectController {
 
         try {
             String branch = p.getDefaultBranch();
-            Path workspace = Path.of("./workspace").resolve(id + "-" + System.currentTimeMillis());
+            Path workspace = Path.of(runtimeProperties.getWorkspaceDir()).resolve(id + "-" + System.currentTimeMillis());
             Path cloned = gitService.cloneRepository(p.getRepoUrl(), branch, workspace, token);
             return ResponseEntity.ok("Cloned to: " + cloned.toAbsolutePath().toString());
         } catch (Exception e) {

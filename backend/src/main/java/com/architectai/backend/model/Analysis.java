@@ -1,29 +1,83 @@
 package com.architectai.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.MapKeyColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.CascadeType;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+@Entity
+@Table(name = "analyses")
 public class Analysis {
+    @Id
     private String id;
+
+    @Column(nullable = false, length = 64)
     private String projectId;
+
+    @Column(nullable = false, length = 64)
     private String type; // "CODE_REVIEW", "ARCHITECTURE", "PERFORMANCE", "SECURITY", etc.
+
+    @Column(nullable = false, length = 32)
     private String status; // PENDING, CLONING, ANALYZING, COMPLETED, FAILED
+
+    @Column(nullable = false)
     private LocalDateTime createdAt;
+
+    @Column
     private LocalDateTime startedAt;
+
+    @Column
     private LocalDateTime finishedAt;
+
+    @Column(length = 128)
     private String agentVersion;
+
+    @Column(length = 2048)
     private String repositoryPath; // local path after cloning
+
+    @Column(length = 4096)
     private String errorMessage; // if status = FAILED
+
+    @Column
     private Integer findingsCount;
+
+    @Column(length = 2048)
     private String reportUrl; // URL to generated PDF
+
+    @Column(length = 2048)
     private String commercialReportUrl; // URL to generated commercial PDF
+
+    @Column(length = 2048)
     private String manifestUrl; // path to report manifest
+
+    @Column
     private Long estimatedCostRs; // estimated cost in R$
+
+    @Column(length = 2048)
     private String staticAnalysisReportUrl;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "analysis_static_findings_by_tool", joinColumns = @JoinColumn(name = "analysis_id"))
+    @MapKeyColumn(name = "tool")
+    @Column(name = "finding_count")
     private Map<String, Integer> staticAnalysisFindingsByTool = new LinkedHashMap<>();
+
+    @JsonIgnoreProperties("analysis")
+    @OneToMany(mappedBy = "analysis", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Finding> findings = new ArrayList<>();
 
     public Analysis() {}
@@ -92,6 +146,19 @@ public class Analysis {
     }
 
     public List<Finding> getFindings() { return new ArrayList<>(findings); }
-    public void setFindings(List<Finding> findings) { this.findings = findings == null ? new ArrayList<>() : new ArrayList<>(findings); }
+
+    /**
+     * Atualiza a coleção gerenciada pelo Hibernate sem trocar a referência da lista.
+     * Trocar a instância quebra o rastreamento de orphan removal do Hibernate.
+     */
+    public void setFindings(List<Finding> incoming) {
+        this.findings.clear();
+        if (incoming != null) {
+            for (Finding f : incoming) {
+                f.setAnalysis(this);
+                this.findings.add(f);
+            }
+        }
+    }
 }
 

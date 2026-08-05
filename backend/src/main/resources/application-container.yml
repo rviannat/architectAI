@@ -1,0 +1,33 @@
+# Perfil ativo quando o backend roda dentro do docker-compose
+# Sobrescreve as configs padrão do application.yml
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/architectai
+    username: architect
+    password: architect
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+
+architectai:
+  runtime:
+    workspace-dir: /data/workspace
+    reports-dir: /data/reports
+  storage:
+    type: minio
+    minio:
+      endpoint: http://minio:9000
+      access-key: minioadmin
+      secret-key: minioadmin
+      bucket: architectai-reports
+
+logging:
+  level:
+    root: INFO
+    com.architectai: INFO
+

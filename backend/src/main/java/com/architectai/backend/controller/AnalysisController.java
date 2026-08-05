@@ -4,11 +4,22 @@ import com.architectai.backend.dto.AnalysisCreateRequest;
 import com.architectai.backend.dto.ApiResponse;
 import com.architectai.backend.model.Analysis;
 import com.architectai.backend.service.AnalysisService;
+import com.architectai.backend.storage.StorageService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,10 +30,12 @@ import jakarta.validation.Valid;
 public class AnalysisController {
 
     private final AnalysisService analysisService;
+    private final StorageService storageService;
 
     @Autowired
-    public AnalysisController(AnalysisService analysisService) {
+    public AnalysisController(AnalysisService analysisService, StorageService storageService) {
         this.analysisService = analysisService;
+        this.storageService = storageService;
     }
 
     /**
@@ -105,6 +118,49 @@ public class AnalysisController {
         payload.put("commercialReport", analysis.getCommercialReportUrl());
         payload.put("manifest", analysis.getManifestUrl());
         return ResponseEntity.ok(ApiResponse.of(200, "Reports available", payload));
+    }
+
+    /**
+     * GET /api/v1/analyses/{id}/report/download
+     * Faz download do PDF consolidado da análise.
+     */
+    @GetMapping(value = "/analyses/{id}/report/download", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<Resource> downloadReport(@PathVariable String id) throws IOException {
+        Analysis analysis = analysisService.getAnalysis(id);
+        if (analysis == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        if (!"COMPLETED".equals(analysis.getStatus())) {
+            return ResponseEntity.status(202).build();
+        }
+
+        String reportReference = analysis.getReportUrl();
+        if (reportReference == null || reportReference.isBlank()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        byte[] pdfBytes;
+        String filename;
+        if (reportReference.startsWith("http://") || reportReference.startsWith("https://") || reportReference.startsWith("file:")) {
+            Path path = reportReference.startsWith("file:") ? Paths.get(java.net.URI.create(reportReference)) : Paths.get(reportReference);
+            if (!Files.exists(path)) {
+                return ResponseEntity.notFound().build();
+            }
+            pdfBytes = Files.readAllBytes(path);
+            filename = path.getFileName().toString();
+        } else {
+            pdfBytes = storageService.download(reportReference);
+            filename = Paths.get(reportReference).getFileName().toString();
+        }
+
+        InputStreamResource resource = new InputStreamResource(new java.io.ByteArrayInputStream(pdfBytes));
+
+        return ResponseEntity.ok()
+            .contentType(MediaType.APPLICATION_PDF)
+            .contentLength(pdfBytes.length)
+            .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
+            .body(resource);
     }
 
     /**

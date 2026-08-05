@@ -1,12 +1,26 @@
 package com.architectai.backend.model;
 
-import java.util.Date;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
+import java.time.Instant;
+
+@Entity
+@Table(name = "projects")
 public class Project {
+    @Id
     private String id;
+
+    @Column(nullable = false, length = 2048)
     private String repoUrl;
+
+    @Column(nullable = false, length = 128)
     private String defaultBranch;
-    private Date createdAt;
+
+    @Column(nullable = false)
+    private Instant createdAt;
 
     public Project() {
     }
@@ -15,7 +29,7 @@ public class Project {
         this.id = id;
         this.repoUrl = repoUrl;
         this.defaultBranch = defaultBranch;
-        this.createdAt = new Date();
+        this.createdAt = Instant.now();
     }
 
     public String getId() {
@@ -42,11 +56,11 @@ public class Project {
         this.defaultBranch = defaultBranch;
     }
 
-    public Date getCreatedAt() {
+    public Instant getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(Date createdAt) {
+    public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
     }
 }

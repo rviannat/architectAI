@@ -3,31 +3,30 @@ package com.architectai.backend.service;
 import com.architectai.backend.model.Analysis;
 import com.architectai.backend.model.Finding;
 import com.architectai.backend.model.Project;
+import com.architectai.backend.repository.AnalysisRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 
 @Service
 public class AnalysisService {
 
-    private final Map<String, Analysis> analysisStore = new ConcurrentHashMap<>();
-    public static final BlockingQueue<Analysis> analysisQueue = new LinkedBlockingQueue<>();
-    
     private final ProjectService projectService;
+    private final AnalysisRepository analysisRepository;
 
     @Autowired
-    public AnalysisService(ProjectService projectService) {
+    public AnalysisService(ProjectService projectService, AnalysisRepository analysisRepository) {
         this.projectService = projectService;
+        this.analysisRepository = analysisRepository;
     }
 
     /**
      * Cria uma nova análise e a enfileira para processamento
      */
+    @Transactional
     public Analysis createAnalysis(String projectId, String type) {
         Project project = projectService.getProject(projectId);
         if (project == null) {
@@ -36,17 +35,9 @@ public class AnalysisService {
 
         String analysisId = UUID.randomUUID().toString();
         Analysis analysis = new Analysis(analysisId, projectId, type);
-        
-        analysisStore.put(analysisId, analysis);
-        
-        try {
-            analysisQueue.put(analysis);
-        } catch (InterruptedException e) {
-            analysis.setStatus("FAILED");
-            analysis.setErrorMessage("Failed to enqueue: " + e.getMessage());
-            Thread.currentThread().interrupt();
-        }
 
+        analysisRepository.save(analysis);
+        
         return analysis;
     }
 
@@ -54,23 +45,22 @@ public class AnalysisService {
      * Obtém status de uma análise
      */
     public Analysis getAnalysis(String analysisId) {
-        return analysisStore.getOrDefault(analysisId, null);
+        return analysisRepository.findById(analysisId).orElse(null);
     }
 
     /**
      * Lista análises de um projeto
      */
     public List<Analysis> listAnalysisByProject(String projectId) {
-        return analysisStore.values().stream()
-                .filter(a -> a.getProjectId().equals(projectId))
-                .toList();
+        return analysisRepository.findByProjectIdOrderByCreatedAtDesc(projectId);
     }
 
     /**
      * Atualiza status de uma análise
      */
+    @Transactional
     public void updateAnalysisStatus(String analysisId, String status) {
-        Analysis analysis = analysisStore.get(analysisId);
+        Analysis analysis = analysisRepository.findById(analysisId).orElse(null);
         if (analysis != null) {
             analysis.setStatus(status);
             if ("ANALYZING".equals(status)) {
@@ -78,6 +68,7 @@ public class AnalysisService {
             } else if ("COMPLETED".equals(status) || "FAILED".equals(status)) {
                 analysis.setFinishedAt(LocalDateTime.now());
             }
+            analysisRepository.save(analysis);
         }
     }
 
@@ -88,6 +79,7 @@ public class AnalysisService {
         completeAnalysis(analysisId, repositoryPath, findingsCount, reportUrl, "", "", estimatedCostRs, List.of(), Map.of(), null);
     }
 
+    @Transactional
     public void completeAnalysis(
         String analysisId,
         String repositoryPath,
@@ -112,7 +104,7 @@ public class AnalysisService {
         Map<String, Integer> staticAnalysisFindingsByTool,
         String staticAnalysisReportUrl
     ) {
-        Analysis analysis = analysisStore.get(analysisId);
+        Analysis analysis = analysisRepository.findById(analysisId).orElse(null);
         if (analysis != null) {
             analysis.setRepositoryPath(repositoryPath);
             analysis.setFindingsCount(findingsCount);
@@ -125,6 +117,7 @@ public class AnalysisService {
             analysis.setStaticAnalysisReportUrl(staticAnalysisReportUrl);
             analysis.setStatus("COMPLETED");
             analysis.setFinishedAt(LocalDateTime.now());
+            analysisRepository.save(analysis);
         }
     }
 
@@ -132,11 +125,12 @@ public class AnalysisService {
      * Marca análise como falha
      */
     public void failAnalysis(String analysisId, String errorMessage) {
-        Analysis analysis = analysisStore.get(analysisId);
+        Analysis analysis = analysisRepository.findById(analysisId).orElse(null);
         if (analysis != null) {
             analysis.setStatus("FAILED");
             analysis.setErrorMessage(errorMessage);
             analysis.setFinishedAt(LocalDateTime.now());
+            analysisRepository.save(analysis);
         }
     }
 
@@ -144,7 +138,11 @@ public class AnalysisService {
      * Retorna tamanho da fila (para monitoramento)
      */
     public int getQueueSize() {
-        return analysisQueue.size();
+        return (int) analysisRepository.countByStatus("PENDING");
+    }
+
+    public List<Analysis> listPendingAnalyses() {
+        return analysisRepository.findByStatusOrderByCreatedAtAsc("PENDING");
     }
 
 }

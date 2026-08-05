@@ -4,6 +4,7 @@ import com.architectai.backend.config.RuntimeProperties;
 import com.architectai.backend.ai.AgentResponse;
 import com.architectai.backend.model.Analysis;
 import com.architectai.backend.model.Project;
+import com.architectai.backend.storage.StorageService;
 import com.itextpdf.io.font.constants.StandardFonts;
 import com.itextpdf.kernel.geom.Rectangle;
 import com.itextpdf.kernel.font.PdfFont;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -45,9 +47,11 @@ public class ReportService {
     private static final long MIN_PDF_SIZE_BYTES = 512;
 
     private final RuntimeProperties runtimeProperties;
+    private final StorageService storageService;
 
-    public ReportService(RuntimeProperties runtimeProperties) {
+    public ReportService(RuntimeProperties runtimeProperties, StorageService storageService) {
         this.runtimeProperties = runtimeProperties;
+        this.storageService = storageService;
     }
 
     private record TocEntry(String title, int page) {}
@@ -77,12 +81,16 @@ public class ReportService {
             Path manifestPath = writeUnifiedManifest(analysisDir, analysis, unifiedReportPath, agentResponses);
 
             String unifiedAbsolutePath = unifiedReportPath.toAbsolutePath().normalize().toString();
+            String objectKey = "analysis_" + analysis.getId() + "/" + unifiedReportPath.getFileName();
+            byte[] pdfBytes = Files.readAllBytes(unifiedReportPath);
+            String storedReportUrl = storageService.upload(objectKey, pdfBytes, "application/pdf");
+
             Map<String, String> agentPaths = new LinkedHashMap<>();
-            agentPaths.put("Unified Report", unifiedAbsolutePath);
+            agentPaths.put("Unified Report", storedReportUrl);
 
             log.info("Relatorio unico gerado para analise {}. PDF: {}", analysis.getId(), unifiedAbsolutePath);
             return new ReportBundle(
-                unifiedAbsolutePath,
+                storedReportUrl,
                 "",
                 manifestPath.toAbsolutePath().normalize().toString(),
                 agentPaths

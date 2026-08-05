@@ -2,6 +2,22 @@ server:
   port: 8080
 
 spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:architectai;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
   jackson:
     serialization:
       indent_output: true
@@ -56,6 +72,13 @@ architectai:
   runtime:
     workspace-dir: ${ARCHITECTAI_RUNTIME_WORKSPACE_DIR:./workspace}
     reports-dir: ${ARCHITECTAI_RUNTIME_REPORTS_DIR:./.architectai/reports}
+  storage:
+    type: ${ARCHITECTAI_STORAGE_TYPE:local}
+    minio:
+      endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+      access-key: ${MINIO_ACCESS_KEY:minioadmin}
+      secret-key: ${MINIO_SECRET_KEY:minioadmin}
+      bucket: ${MINIO_BUCKET:architectai-reports}
 
 management:
   endpoints:

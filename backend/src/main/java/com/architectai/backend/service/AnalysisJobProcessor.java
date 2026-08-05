@@ -73,14 +73,12 @@ public class AnalysisJobProcessor {
      */
     @Scheduled(fixedDelay = 5000, initialDelay = 10000)
     public void processAnalysisQueue() {
-        if (AnalysisService.analysisQueue.isEmpty()) {
+        List<Analysis> pendingAnalyses = analysisService.listPendingAnalyses();
+        if (pendingAnalyses.isEmpty()) {
             return;
         }
 
-        Analysis analysis = AnalysisService.analysisQueue.poll();
-        if (analysis == null) {
-            return;
-        }
+        Analysis analysis = pendingAnalyses.get(0);
 
         log.info("Processando análise: {} para projeto: {}", analysis.getId(), analysis.getProjectId());
         processAnalysis(analysis);
